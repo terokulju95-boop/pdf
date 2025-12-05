@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <meta name="theme-color" content="#2563eb">
+    <meta name="description" content="Yksinkertainen ja tehokas PDF-lukija mobiililaitteille">
+    <title>PDF Lukija</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #1e293b;
+            color: #f1f5f9;
+            overflow: hidden;
+            touch-action: pan-y pinch-zoom;
+        }
+
+        #uploadSection {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 2rem;
+            text-align: center;
+        }
+
+        #uploadSection h1 {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            color: #3b82f6;
+        }
+
+        #uploadSection p {
+            margin-bottom: 2rem;
+            color: #94a3b8;
+            font-size: 1.1rem;
+        }
+
+        .upload-btn {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            font-size: 1.1rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: background 0.3s;
+            font-weight: 600;
+        }
+
+        .upload-btn:hover {
+            background: #2563eb;
+        }
+
+        .upload-btn:active {
+            transform: scale(0.98);
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        #viewerSection {
+            display: none;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        #toolbar {
+            background: #0f172a;
+            padding: 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+
+        .toolbar-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .toolbar-btn {
+            background: #334155;
+            color: #f1f5f9;
+            border: none;
+            padding: 0.6rem 1rem;
+            border-radius: 0.375rem;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background 0.2s;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        .toolbar-btn:hover {
+            background: #475569;
+        }
+
+        .toolbar-btn:active {
+            background: #1e293b;
+        }
+
+        #pageInfo {
+            color: #94a3b8;
+            font-size: 0.9rem;
+            padding: 0.5rem;
+            white-space: nowrap;
+        }
+
+        #canvasContainer {
+            flex: 1;
+            overflow: auto;
+            background: #0f172a;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 1rem;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        #pdfCanvas {
+            max-width: 100%;
+            height: auto;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            background: white;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #3b82f6;
+            font-size: 1.2rem;
+        }
+
+        @media (max-width: 640px) {
+            #toolbar {
+                padding: 0.5rem;
+            }
+
+            .toolbar-btn {
+                padding: 0.5rem 0.75rem;
+                font-size: 0.85rem;
+            }
+
+            #pageInfo {
+                font-size: 0.85rem;
+            }
+
+            #uploadSection h1 {
+                font-size: 1.5rem;
+            }
+
+            #uploadSection p {
+                font-size: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="uploadSection">
+        <h1>📄 PDF Lukija</h1>
+        <p>Valitse PDF-tiedosto lukeaksesi sitä</p>
+        <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
+            Valitse PDF
+        </button>
+        <input type="file" id="fileInput" accept=".pdf,application/pdf">
+    </div>
+
+    <div id="viewerSection">
+        <div id="toolbar">
+            <div class="toolbar-group">
+                <button class="toolbar-btn" onclick="closePDF()">✕ Sulje</button>
+            </div>
+            <div class="toolbar-group">
+                <button class="toolbar-btn" onclick="previousPage()">◄ Edellinen</button>
+                <span id="pageInfo">Sivu 1 / 1</span>
+                <button class="toolbar-btn" onclick="nextPage()">Seuraava ►</button>
+            </div>
+            <div class="toolbar-group">
+                <button class="toolbar-btn" onclick="zoomOut()">− Loitonna</button>
+                <button class="toolbar-btn" onclick="zoomIn()">+ Lähennä</button>
+            </div>
+        </div>
+        <div id="canvasContainer">
+            <canvas id="pdfCanvas"></canvas>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        // Register service worker
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js')
+                .then(reg => console.log('Service Worker registered', reg))
+                .catch(err => console.log('Service Worker registration failed', err));
+        }
+
+        // PDF.js worker setup
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        let pdfDoc = null;
+        let pageNum = 1;
+        let pageRendering = false;
+        let pageNumPending = null;
+        let scale = 1.5;
+
+        const canvas = document.getElementById('pdfCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Handle file selection
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file && file.type === 'application/pdf') {
+                loadPDF(file);
+            }
+        });
+
+        // Handle file opening from other apps (if supported by browser)
+        if ('launchQueue' in window) {
+            window.launchQueue.setConsumer((launchParams) => {
+                if (launchParams.files && launchParams.files.length > 0) {
+                    launchParams.files[0].getFile().then(file => {
+                        if (file.type === 'application/pdf') {
+                            loadPDF(file);
+                        }
+                    });
+                }
+            });
+        }
+
+        function loadPDF(file) {
+            const fileReader = new FileReader();
+            fileReader.onload = function() {
+                const typedarray = new Uint8Array(this.result);
+                
+                pdfjsLib.getDocument(typedarray).promise.then(function(pdf) {
+                    pdfDoc = pdf;
+                    document.getElementById('uploadSection').style.display = 'none';
+                    document.getElementById('viewerSection').style.display = 'flex';
+                    pageNum = 1;
+                    renderPage(pageNum);
+                }).catch(function(error) {
+                    alert('Virhe PDF:n lataamisessa: ' + error.message);
+                });
+            };
+            fileReader.readAsArrayBuffer(file);
+        }
+
+        function renderPage(num) {
+            pageRendering = true;
+            pdfDoc.getPage(num).then(function(page) {
+                const viewport = page.getViewport({scale: scale});
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+
+                const renderContext = {
+                    canvasContext: ctx,
+                    viewport: viewport
+                };
+
+                const renderTask = page.render(renderContext);
+                renderTask.promise.then(function() {
+                    pageRendering = false;
+                    if (pageNumPending !== null) {
+                        renderPage(pageNumPending);
+                        pageNumPending = null;
+                    }
+                });
+            });
+
+            document.getElementById('pageInfo').textContent = 
+                'Sivu ' + num + ' / ' + pdfDoc.numPages;
+        }
+
+        function queueRenderPage(num) {
+            if (pageRendering) {
+                pageNumPending = num;
+            } else {
+                renderPage(num);
+            }
+        }
+
+        function previousPage() {
+            if (pageNum <= 1) {
+                return;
+            }
+            pageNum--;
+            queueRenderPage(pageNum);
+        }
+
+        function nextPage() {
+            if (pageNum >= pdfDoc.numPages) {
+                return;
+            }
+            pageNum++;
+            queueRenderPage(pageNum);
+        }
+
+        function zoomIn() {
+            scale += 0.25;
+            queueRenderPage(pageNum);
+        }
+
+        function zoomOut() {
+            if (scale <= 0.5) {
+                return;
+            }
+            scale -= 0.25;
+            queueRenderPage(pageNum);
+        }
+
+        function closePDF() {
+            pdfDoc = null;
+            pageNum = 1;
+            scale = 1.5;
+            document.getElementById('viewerSection').style.display = 'none';
+            document.getElementById('uploadSection').style.display = 'flex';
+            document.getElementById('fileInput').value = '';
+        }
+
+        // Touch gestures for mobile
+        let touchStartX = 0;
+        let touchEndX = 0;
+
+        canvas.addEventListener('touchstart', function(e) {
+            touchStartX = e.changedTouches[0].screenX;
+        }, false);
+
+        canvas.addEventListener('touchend', function(e) {
+            touchEndX = e.changedTouches[0].screenX;
+            handleSwipe();
+        }, false);
+
+        function handleSwipe() {
+            const swipeThreshold = 50;
+            if (touchEndX < touchStartX - swipeThreshold) {
+                nextPage();
+            }
+            if (touchEndX > touchStartX + swipeThreshold) {
+                previousPage();
+            }
+        }
+    </script>
+</body>
+</html>
